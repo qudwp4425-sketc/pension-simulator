@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>퇴직금 비교 시뮬레이터 — DB vs DC</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0e1117;--bg2:#161b27;--bg3:#1e2535;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#f0f2f8;--text2:#8b93a8;--text3:#5a6278;
+  --db:#4f9cf9;--db-l:rgba(79,156,249,0.12);
+  --dc:#36d6a0;--dc-l:rgba(54,214,160,0.12);
+  --warn:#f5a623;--purple:#c084fc;
+  --r:12px;--rs:8px;
+}
+body{font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+/* Header */
+.header{background:var(--bg2);border-bottom:1px solid var(--border);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+.logo{width:32px;height:32px;background:linear-gradient(135deg,var(--db),var(--dc));border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;margin-right:10px;flex-shrink:0;}
+.h-left{display:flex;align-items:center;}
+.h-title{font-size:15px;font-weight:600;}
+.h-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.h-right{display:flex;gap:7px;flex-wrap:wrap;}
+.badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:500;}
+.badge-db{background:var(--db-l);color:var(--db);border:1px solid rgba(79,156,249,0.25);}
+.badge-dc{background:var(--dc-l);color:var(--dc);border:1px solid rgba(54,214,160,0.25);}
+/* Layout */
+.main{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 70px - 42px);}
+/* Sidebar */
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:20px 18px;display:flex;flex-direction:column;gap:20px;overflow-y:auto;}
+.sec-title{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+.ctrl{display:flex;flex-direction:column;gap:7px;}
+.ctrl-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--text2);}
+.ctrl-val{font-size:13px;font-weight:600;color:var(--text);background:var(--bg3);padding:2px 7px;border-radius:6px;}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;background:var(--bg3);border-radius:2px;outline:none;cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--text);border:3px solid var(--bg2);box-shadow:0 0 0 1px var(--border2);cursor:pointer;}
+.divider{height:1px;background:var(--border);}
+.scen-btn{width:100%;padding:9px 11px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--rs);cursor:pointer;text-align:left;margin-bottom:7px;transition:border-color .15s;}
+.scen-btn:hover{border-color:var(--border2);}
+.scen-name{font-size:13px;color:var(--text);font-weight:500;}
+.scen-desc{font-size:11px;color:var(--text3);margin-top:2px;}
+.note{font-size:11px;color:var(--text3);line-height:1.7;}
+.date-input{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.date-input input[type=number]{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;-moz-appearance:textfield;}
+.date-input input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+.date-input input[type=number]:focus{border-color:var(--border2);}
+.date-lbl{font-size:11px;color:var(--text3);margin-bottom:4px;}
+.tenure-pill{display:inline-block;font-size:11px;padding:3px 10px;border-radius:20px;font-weight:600;background:rgba(245,166,35,0.12);color:var(--warn);border:1px solid rgba(245,166,35,0.25);margin-top:8px;}
+/* Content */
+.content{padding:20px 22px;display:flex;flex-direction:column;gap:18px;overflow:auto;}
+/* KPI */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;position:relative;overflow:hidden;}
+.kpi-line{position:absolute;top:0;left:0;right:0;height:2px;}
+.kpi-lbl{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px;}
+.kpi-num{font-size:20px;font-weight:700;line-height:1.1;}
+.kpi-sub{font-size:11px;color:var(--text3);margin-top:5px;}
+/* Charts */
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;}
+.card.full{grid-column:1/-1;}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+.card-title{font-size:14px;font-weight:600;}
+.card-sub{font-size:11px;color:var(--text3);margin-top:3px;}
+.legend{display:flex;gap:12px;}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);}
+.leg-dot{width:8px;height:8px;border-radius:2px;}
+/* Insights */
+.insights{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;}
+.ins-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;}
+.ins-card{background:var(--bg3);border-radius:var(--rs);padding:13px;border:1px solid var(--border);}
+.ins-lbl{font-size:10px;color:var(--text3);margin-bottom:5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;}
+.ins-val{font-size:17px;font-weight:700;color:var(--text);}
+.ins-desc{font-size:11px;color:var(--text3);margin-top:4px;line-height:1.5;}
+.prog-label{font-size:11px;color:var(--text3);margin-bottom:10px;}
+.prog-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.prog-name{font-size:12px;color:var(--text2);min-width:48px;}
+.prog-track{flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:3px;transition:width .4s ease;}
+.prog-amount{font-size:12px;color:var(--text2);min-width:82px;text-align:right;}
+/* Footer */
+.footer{padding:11px 20px;background:var(--bg2);border-top:1px solid var(--border);font-size:11px;color:var(--text3);display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px;}
+/* Canvas */
+canvas{display:block;}
+/* Responsive */
+@media(max-width:700px){
+  .main{grid-template-columns:1fr;}
+  .sidebar{border-right:none;border-bottom:1px solid var(--border);}
+  .kpi-grid{grid-template-columns:repeat(2,1fr);}
+  .charts{grid-template-columns:1fr;}
+  .ins-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="h-left">
+    <div class="logo">퇴</div>
+    <div>
+      <div class="h-title">퇴직금 비교 시뮬레이터</div>
+      <div class="h-sub">DB형 확정급여 vs DC형 확정기여 — 장기 수익 분석</div>
+    </div>
+  </div>
+  <div class="h-right">
+    <span class="badge badge-db">DB 확정급여형</span>
+    <span class="badge badge-dc">DC 확정기여형</span>
+  </div>
+</header>
+
+<div class="main">
+<aside class="sidebar">
+  <div>
+    <div class="sec-title">📅 입사 정보</div>
+    <div class="date-lbl">입사년월</div>
+    <div class="date-input">
+      <div>
+        <div class="date-lbl" style="margin-bottom:3px;">년도</div>
+        <input type="number" id="join-year" min="1990" max="2030" value="2026">
+      </div>
+      <div>
+        <div class="date-lbl" style="margin-bottom:3px;">월</div>
+        <input type="number" id="join-month" min="1" max="12" value="4">
+      </div>
+    </div>
+    <div id="tenure-display"></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div>
+    <div class="sec-title">📋 급여 및 수익 설정</div>
+    <div style="display:flex;flex-direction:column;gap:15px;">
+      <div class="ctrl">
+        <div class="ctrl-row"><span>월 세후 급여</span><span class="ctrl-val" id="v-sal">280만원</span></div>
+        <input type="range" id="salary" min="150" max="800" value="280" step="10">
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>연봉 상승률</span><span class="ctrl-val" id="v-raise">3.5%</span></div>
+        <input type="range" id="raise" min="0" max="10" value="3.5" step="0.5">
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>목표 근속 연수</span><span class="ctrl-val" id="v-years">20년</span></div>
+        <input type="range" id="years" min="5" max="40" value="20" step="1">
+      </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>DC 투자 수익률</span><span class="ctrl-val" id="v-ret">7.0%</span></div>
+        <input type="range" id="ret" min="2" max="15" value="7" step="0.5">
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div>
+    <div class="sec-title">⚡ 빠른 시나리오</div>
+    <button class="scen-btn" onclick="setScenario(280,3.5,20,7)">
+      <div class="scen-name">기본 설정</div>
+      <div class="scen-desc">280만원 · 3.5% · 20년 · 7%</div>
+    </button>
+    <button class="scen-btn" onclick="setScenario(500,5,30,9)">
+      <div class="scen-name">고성장 직장인</div>
+      <div class="scen-desc">500만원 · 5% · 30년 · 9%</div>
+    </button>
+    <button class="scen-btn" onclick="setScenario(250,2,25,7)">
+      <div class="scen-name">안정형 직장인</div>
+      <div class="scen-desc">250만원 · 2% · 25년 · 7%</div>
+    </button>
+    <button class="scen-btn" onclick="setScenario(700,7,35,11)">
+      <div class="scen-name">임원급 장기근속</div>
+      <div class="scen-desc">700만원 · 7% · 35년 · 11%</div>
+    </button>
+  </div>
+
+  <div class="divider"></div>
+  <div class="note">
+    <b style="color:var(--text2);">계산 기준</b><br>
+    DB: 퇴직 직전 월급 × 근속연수<br>
+    DC: 매년 월급 적립 후 복리 운용<br>
+    세후 월급 기준 간편 비교
+  </div>
+</aside>
+
+<main class="content">
+  <!-- KPI -->
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="kpi-line" style="background:var(--db)"></div>
+      <div class="kpi-lbl">DB형 퇴직금</div>
+      <div class="kpi-num" id="kpi-db" style="color:var(--db)">—</div>
+      <div class="kpi-sub">확정급여형</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-line" style="background:var(--dc)"></div>
+      <div class="kpi-lbl">DC형 퇴직금</div>
+      <div class="kpi-num" id="kpi-dc" style="color:var(--dc)">—</div>
+      <div class="kpi-sub">S&amp;P 500 투자</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-line" style="background:var(--warn)"></div>
+      <div class="kpi-lbl">DC − DB 차이</div>
+      <div class="kpi-num" id="kpi-diff" style="color:var(--warn)">—</div>
+      <div class="kpi-sub" id="kpi-diff-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-line" style="background:var(--purple)"></div>
+      <div class="kpi-lbl">DC / DB 배율</div>
+      <div class="kpi-num" id="kpi-ratio" style="color:var(--purple)">—</div>
+      <div class="kpi-sub">DC는 DB의 N배</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="card full">
+      <div class="card-head">
+        <div>
+          <div class="card-title">연도별 누적 퇴직금 추이</div>
+          <div class="card-sub">근속 기간에 따른 DB·DC 누적액 비교</div>
+        </div>
+        <div class="legend">
+          <div class="leg"><div class="leg-dot" style="background:var(--db)"></div>DB형</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--dc)"></div>DC형 (S&amp;P500)</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--warn);opacity:.7"></div>현재</div>
+        </div>
+      </div>
+      <canvas id="lineChart" style="width:100%;height:220px;"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">연간 기여액 증가</div>
+          <div class="card-sub">매년 추가 적립액 비교</div>
+        </div>
+        <div class="legend">
+          <div class="leg"><div class="leg-dot" style="background:var(--db)"></div>DB</div>
+          <div class="leg"><div class="leg-dot" style="background:var(--dc)"></div>DC</div>
+        </div>
+      </div>
+      <canvas id="barChart" style="width:100%;height:180px;"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-title">DC형 최종 구성</div>
+          <div class="card-sub">원금 vs 투자 수익</div>
+        </div>
+      </div>
+      <canvas id="donutChart" style="width:100%;height:180px;"></canvas>
+    </div>
+  </div>
+
+  <!-- Insights -->
+  <div class="insights">
+    <div class="card-head">
+      <div>
+        <div class="card-title">핵심 인사이트</div>
+        <div class="card-sub">시뮬레이션 기반 주요 지표</div>
+      </div>
+    </div>
+    <div class="ins-grid">
+      <div class="ins-card">
+        <div class="ins-lbl">손익분기 시점</div>
+        <div class="ins-val" id="ins-be">—</div>
+        <div class="ins-desc">DC형이 DB형을 처음 앞서는 연도</div>
+      </div>
+      <div class="ins-card">
+        <div class="ins-lbl">DC 원금 총합</div>
+        <div class="ins-val" id="ins-pr">—</div>
+        <div class="ins-desc">투자 없이 단순 적립만 했을 때</div>
+      </div>
+      <div class="ins-card">
+        <div class="ins-lbl">DC 투자 수익</div>
+        <div class="ins-val" id="ins-pf">—</div>
+        <div class="ins-desc">복리 운용으로 발생한 순수 수익</div>
+      </div>
+    </div>
+    <div class="prog-label">최종 퇴직금 상대 비교</div>
+    <div class="prog-row">
+      <span class="prog-name">DB형</span>
+      <div class="prog-track"><div class="prog-fill" id="pb-db" style="background:var(--db);width:0%"></div></div>
+      <span class="prog-amount" id="pv-db">—</span>
+    </div>
+    <div class="prog-row">
+      <span class="prog-name">DC형</span>
+      <div class="prog-track"><div class="prog-fill" id="pb-dc" style="background:var(--dc);width:0%"></div></div>
+      <span class="prog-amount" id="pv-dc">—</span>
+    </div>
+  </div>
+</main>
+</div>
+
+<footer class="footer">
+  <span>퇴직금 비교 시뮬레이터 · 세후 월급 기준 간편 추정 — 실제 세금·법령에 따라 상이할 수 있음</span>
+  <span id="footer-date">입사일 2026.04 기준</span>
+</footer>
+
+<script>
+/* ── 순수 Canvas 차트 라이브러리 (외부 의존 없음) ── */
+function getDP(ratio){ return Math.max(1, Math.round(window.devicePixelRatio||1)); }
+
+function setupCanvas(canvas){
+  var dpr = getDP();
+  var rect = canvas.getBoundingClientRect();
+  var w = rect.width || canvas.offsetWidth || canvas.parentElement.offsetWidth || 300;
+  var h = parseInt(canvas.style.height) || 200;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  var ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return {ctx:ctx, w:w, h:h};
+}
+
+function drawLineChart(canvasId, labels, datasets, nowIdx){
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  var s = setupCanvas(canvas);
+  var ctx=s.ctx, W=s.w, H=s.h;
+  var pad={top:20,right:16,bottom:36,left:52};
+  var cw=W-pad.left-pad.right, ch=H-pad.top-pad.bottom;
+
+  ctx.clearRect(0,0,W,H);
+
+  var allVals = [].concat.apply([], datasets.map(function(d){return d.data;}));
+  var maxV = Math.max.apply(null, allVals) * 1.05;
+  var minV = 0;
+  var range = maxV - minV || 1;
+
+  function xPos(i){ return pad.left + (i/(labels.length-1||1))*cw; }
+  function yPos(v){ return pad.top + ch - ((v-minV)/range)*ch; }
+
+  // Grid lines
+  ctx.strokeStyle='rgba(255,255,255,0.05)';
+  ctx.lineWidth=1;
+  for(var g=0;g<=4;g++){
+    var gy = pad.top + (g/4)*ch;
+    ctx.beginPath(); ctx.moveTo(pad.left,gy); ctx.lineTo(pad.left+cw,gy); ctx.stroke();
+  }
+
+  // Y axis labels
+  ctx.fillStyle='#5a6278'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+  for(var g=0;g<=4;g++){
+    var val = maxV*(1-g/4);
+    var gy = pad.top + (g/4)*ch;
+    ctx.fillText(fmtS(val), pad.left-6, gy+4);
+  }
+
+  // X axis labels (every ~5 steps)
+  ctx.textAlign='center'; ctx.fillStyle='#5a6278'; ctx.font='10px sans-serif';
+  var step = Math.max(1, Math.floor(labels.length/8));
+  for(var i=0;i<labels.length;i+=step){
+    ctx.fillText(labels[i], xPos(i), pad.top+ch+16);
+  }
+
+  // "현재" vertical line
+  if(nowIdx >= 0 && nowIdx < labels.length){
+    var nx = xPos(nowIdx);
+    ctx.save();
+    ctx.strokeStyle='rgba(245,166,35,0.55)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(nx,pad.top); ctx.lineTo(nx,pad.top+ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#f5a623'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('현재', nx, pad.top-4);
+    ctx.restore();
+  }
+
+  // Lines
+  datasets.forEach(function(ds){
+    var data = ds.data;
+    ctx.save();
+    if(ds.dash) ctx.setLineDash(ds.dash);
+    // Fill
+    ctx.beginPath();
+    ctx.moveTo(xPos(0), yPos(data[0]));
+    for(var i=1;i<data.length;i++){
+      var x0=xPos(i-1),y0=yPos(data[i-1]),x1=xPos(i),y1=yPos(data[i]);
+      var cpx=(x0+x1)/2;
+      ctx.bezierCurveTo(cpx,y0,cpx,y1,x1,y1);
+    }
+    ctx.lineTo(xPos(data.length-1), pad.top+ch);
+    ctx.lineTo(xPos(0), pad.top+ch);
+    ctx.closePath();
+    ctx.fillStyle=ds.fill||'rgba(255,255,255,0.03)';
+    ctx.fill();
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(xPos(0), yPos(data[0]));
+    for(var i=1;i<data.length;i++){
+      var x0=xPos(i-1),y0=yPos(data[i-1]),x1=xPos(i),y1=yPos(data[i]);
+      var cpx=(x0+x1)/2;
+      ctx.bezierCurveTo(cpx,y0,cpx,y1,x1,y1);
+    }
+    ctx.strokeStyle=ds.color; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.restore();
+    // Dots at endpoints
+    ctx.beginPath();
+    ctx.arc(xPos(data.length-1), yPos(data[data.length-1]), 4, 0, Math.PI*2);
+    ctx.fillStyle=ds.color; ctx.fill();
+  });
+}
+
+function drawBarChart(canvasId, labels, datasets){
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  var s = setupCanvas(canvas);
+  var ctx=s.ctx, W=s.w, H=s.h;
+  var pad={top:16,right:10,bottom:32,left:48};
+  var cw=W-pad.left-pad.right, ch=H-pad.top-pad.bottom;
+
+  ctx.clearRect(0,0,W,H);
+
+  var allVals=[].concat.apply([],datasets.map(function(d){return d.data;}));
+  var maxV=Math.max.apply(null,allVals)*1.1||1;
+
+  var n=labels.length, grpW=cw/n, barW=grpW*0.35, gap=grpW*0.04;
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
+  for(var g=0;g<=4;g++){
+    var gy=pad.top+(g/4)*ch;
+    ctx.beginPath(); ctx.moveTo(pad.left,gy); ctx.lineTo(pad.left+cw,gy); ctx.stroke();
+  }
+  ctx.fillStyle='#5a6278'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+  for(var g=0;g<=4;g++){
+    ctx.fillText(fmtS(maxV*(1-g/4)), pad.left-4, pad.top+(g/4)*ch+4);
+  }
+
+  datasets.forEach(function(ds, di){
+    ds.data.forEach(function(v, i){
+      var x = pad.left + i*grpW + di*(barW+gap) + gap;
+      var bh = (v/maxV)*ch;
+      var y = pad.top+ch-bh;
+      ctx.fillStyle=ds.color;
+      // Rounded top
+      var r=3;
+      ctx.beginPath();
+      ctx.moveTo(x+r,y); ctx.lineTo(x+barW-r,y);
+      ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
+      ctx.lineTo(x+barW,y+bh); ctx.lineTo(x,y+bh); ctx.lineTo(x,y+r);
+      ctx.quadraticCurveTo(x,y,x+r,y);
+      ctx.closePath(); ctx.fill();
+    });
+  });
+
+  ctx.fillStyle='#5a6278'; ctx.font='10px sans-serif'; ctx.textAlign='center';
+  labels.forEach(function(l,i){
+    ctx.fillText(l, pad.left+i*grpW+grpW/2, pad.top+ch+18);
+  });
+}
+
+function drawDonut(canvasId, data, colors, labels){
+  var canvas = document.getElementById(canvasId);
+  if(!canvas) return;
+  var s = setupCanvas(canvas);
+  var ctx=s.ctx, W=s.w, H=s.h;
+  ctx.clearRect(0,0,W,H);
+
+  var cx=W*0.38, cy=H/2, outerR=Math.min(cx,cy)*0.85, innerR=outerR*0.58;
+  var total=data.reduce(function(a,b){return a+b;},0)||1;
+  var start=-Math.PI/2;
+
+  data.forEach(function(v,i){
+    var angle=(v/total)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,outerR,start,start+angle);
+    ctx.closePath();
+    ctx.fillStyle=colors[i]; ctx.fill();
+    // Inner hole
+    start+=angle;
+  });
+  // Cut inner circle
+  ctx.beginPath(); ctx.arc(cx,cy,innerR,0,Math.PI*2);
+  ctx.fillStyle='#161b27'; ctx.fill();
+
+  // Center text
+  var pct = total > 0 ? Math.round(data[1]/total*100) : 0;
+  ctx.fillStyle='#f0f2f8'; ctx.font='bold 16px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('수익 '+pct+'%', cx, cy+5);
+
+  // Legend
+  var lx=W*0.72, ly=cy-labels.length*14;
+  labels.forEach(function(l,i){
+    var y=ly+i*28;
+    ctx.fillStyle=colors[i];
+    ctx.fillRect(lx,y,12,12);
+    ctx.fillStyle='#8b93a8'; ctx.font='12px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(l, lx+18, y+11);
+    ctx.fillStyle='#f0f2f8'; ctx.font='bold 12px sans-serif';
+    ctx.fillText(fmtS(data[i]), lx+18, y+26);
+  });
+}
+
+/* ── 데이터 계산 & UI 업데이트 ── */
+function fmt(v){
+  v=Math.round(v);
+  if(Math.abs(v)>=10000) return (v/10000).toFixed(2)+'억원';
+  return v.toLocaleString()+'만원';
+}
+function fmtS(v){
+  v=Math.round(v);
+  if(Math.abs(v)>=10000) return (v/10000).toFixed(1)+'억';
+  if(Math.abs(v)>=1000) return (v/1000).toFixed(0)+'천';
+  return v+'';
+}
+
+function getTenure(){
+  var jy=parseInt(document.getElementById('join-year').value)||2026;
+  var jm=parseInt(document.getElementById('join-month').value)||4;
+  var now=new Date(); var ny=now.getFullYear(), nm=now.getMonth()+1;
+  var months=(ny-jy)*12+(nm-jm); if(months<0) months=0;
+  return{years:Math.floor(months/12),months:months%12,total:months,jy:jy,jm:jm};
+}
+
+function updateTenure(){
+  var t=getTenure();
+  var el=document.getElementById('tenure-display');
+  var targetYrs=parseInt(document.getElementById('years').value)||20;
+  var remaining=targetYrs-t.years;
+  var jm=String(t.jm).padStart(2,'0');
+  document.getElementById('footer-date').textContent='입사일 '+t.jy+'.'+jm+' 기준';
+  if(t.total<1){
+    el.innerHTML='<div class="tenure-pill">입사 예정 또는 입사 직후</div>';
+  } else {
+    var remTxt=remaining>0?'목표까지 <b style="color:var(--warn)">'+remaining+'년</b> 남음':'<b style="color:var(--dc)">목표 달성!</b>';
+    el.innerHTML='<div class="tenure-pill">현재 근속 '+t.years+'년 '+t.months+'개월</div>'
+      +'<div style="font-size:11px;color:var(--text3);margin-top:6px;">'+remTxt+'</div>';
+  }
+  return t;
+}
+
+function compute(){
+  var sal=+document.getElementById('salary').value;
+  var raise=+document.getElementById('raise').value/100;
+  var yrs=+document.getElementById('years').value;
+  var ret=+document.getElementById('ret').value/100;
+  var t=updateTenure();
+
+  document.getElementById('v-sal').textContent=sal+'만원';
+  document.getElementById('v-raise').textContent=(+document.getElementById('raise').value).toFixed(1)+'%';
+  document.getElementById('v-years').textContent=yrs+'년';
+  document.getElementById('v-ret').textContent=(+document.getElementById('ret').value).toFixed(1)+'%';
+
+  var labels=[],dbArr=[],dcArr=[],annDB=[],annDC=[];
+  var dcAcc=0,principal=0,breakeven=null;
+
+  for(var y=1;y<=yrs;y++){
+    var mo=sal*Math.pow(1+raise,y-1);
+    dcAcc=(dcAcc+mo)*(1+ret);
+    principal+=mo;
+    var db=sal*Math.pow(1+raise,y-1)*y;
+    labels.push(y+'년');
+    dbArr.push(Math.round(db));
+    dcArr.push(Math.round(dcAcc));
+    annDB.push(Math.round(mo));
+    annDC.push(Math.round(mo*(1+ret)));
+    if(breakeven===null&&dcAcc>=db) breakeven=y;
+  }
+
+  var dbF=dbArr[yrs-1],dcF=dcArr[yrs-1],diff=dcF-dbF;
+  var profit=dcF-Math.round(principal),maxV=Math.max(dbF,dcF);
+
+  // KPI
+  document.getElementById('kpi-db').textContent=fmt(dbF);
+  document.getElementById('kpi-dc').textContent=fmt(dcF);
+  document.getElementById('kpi-diff').textContent=(diff>=0?'+':'')+fmt(diff);
+  document.getElementById('kpi-diff').style.color=diff>=0?'var(--dc)':'#f87171';
+  document.getElementById('kpi-diff-sub').textContent=diff>=0?'DC형이 유리':'DB형이 유리';
+  document.getElementById('kpi-ratio').textContent=(dcF/dbF).toFixed(2)+'x';
+  document.getElementById('ins-be').textContent=breakeven?breakeven+'년차':'역전 없음';
+  document.getElementById('ins-pr').textContent=fmt(principal);
+  document.getElementById('ins-pf').textContent=fmt(profit);
+  document.getElementById('pb-db').style.width=(dbF/maxV*100)+'%';
+  document.getElementById('pb-dc').style.width=(dcF/maxV*100)+'%';
+  document.getElementById('pv-db').textContent=fmt(dbF);
+  document.getElementById('pv-dc').textContent=fmt(dcF);
+
+  // Charts
+  var nowIdx = t.years > 0 && t.years <= yrs ? t.years - 1 : -1;
+  drawLineChart('lineChart', labels,
+    [{data:dbArr,color:'#4f9cf9',fill:'rgba(79,156,249,0.06)',dash:[5,3]},
+     {data:dcArr,color:'#36d6a0',fill:'rgba(54,214,160,0.06)'}], nowIdx);
+
+  var step=Math.max(1,Math.floor(yrs/8));
+  var bL=[],bDB=[],bDC=[];
+  for(var i=step-1;i<yrs;i+=step){bL.push((i+1)+'년');bDB.push(annDB[i]);bDC.push(annDC[i]);}
+  drawBarChart('barChart', bL,
+    [{data:bDB,color:'rgba(79,156,249,0.75)'},{data:bDC,color:'rgba(54,214,160,0.75)'}]);
+
+  drawDonut('donutChart',
+    [Math.round(principal), Math.max(0,profit)],
+    ['rgba(79,156,249,0.85)','rgba(54,214,160,0.85)'],
+    ['원금','투자 수익']);
+}
+
+function setScenario(s,r,y,rt){
+  document.getElementById('salary').value=s;
+  document.getElementById('raise').value=r;
+  document.getElementById('years').value=y;
+  document.getElementById('ret').value=rt;
+  compute();
+}
+
+['salary','raise','years','ret'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',compute);
+});
+['join-year','join-month'].forEach(function(id){
+  document.getElementById(id).addEventListener('input',compute);
+});
+
+// 창 크기 바뀌면 차트 다시 그리기
+window.addEventListener('resize', compute);
+// 초기 실행
+window.addEventListener('load', compute);
+compute();
+</script>
+</body>
+</html>
