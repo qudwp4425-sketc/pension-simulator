@@ -54,7 +54,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;heigh
 /* Content */
 .content{padding:20px 22px;display:flex;flex-direction:column;gap:18px;overflow:auto;}
 /* KPI */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
 .kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;position:relative;overflow:hidden;}
 .kpi-line{position:absolute;top:0;left:0;right:0;height:2px;}
 .kpi-lbl{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:7px;}
@@ -157,6 +157,11 @@ canvas{display:block;}
         <div class="ctrl-row"><span>DC 투자 수익률</span><span class="ctrl-val" id="v-ret">7.0%</span></div>
         <input type="range" id="ret" min="2" max="15" value="7" step="0.5">
       </div>
+      <div class="ctrl">
+        <div class="ctrl-row"><span>DB→DC 전환 시점</span><span class="ctrl-val" id="v-switch">없음</span></div>
+        <input type="range" id="switch-yr" min="0" max="39" value="0" step="1">
+        <div id="switch-desc" style="font-size:11px;color:var(--text3);margin-top:4px;">슬라이더를 움직이면 전환 시점 설정</div>
+      </div>
     </div>
   </div>
 
@@ -191,6 +196,12 @@ canvas{display:block;}
       <div class="kpi-sub" id="kpi-diff-sub">—</div>
     </div>
     <div class="kpi">
+      <div class="kpi-line" style="background:#f5a623"></div>
+      <div class="kpi-lbl">DB→DC 전환 퇴직금</div>
+      <div class="kpi-num" id="kpi-mix" style="color:#f5a623">—</div>
+      <div class="kpi-sub" id="kpi-mix-sub">전환 미설정</div>
+    </div>
+    <div class="kpi">
       <div class="kpi-line" style="background:var(--purple)"></div>
       <div class="kpi-lbl">DC / DB 배율</div>
       <div class="kpi-num" id="kpi-ratio" style="color:var(--purple)">—</div>
@@ -209,6 +220,7 @@ canvas{display:block;}
         <div class="legend">
           <div class="leg"><div class="leg-dot" style="background:var(--db)"></div>DB형</div>
           <div class="leg"><div class="leg-dot" style="background:var(--dc)"></div>DC형 (S&amp;P500)</div>
+          <div class="leg"><div class="leg-dot" style="background:#f5a623"></div>DB→DC 전환</div>
           <div class="leg"><div class="leg-dot" style="background:var(--warn);opacity:.7"></div>현재</div>
         </div>
       </div>
@@ -264,6 +276,11 @@ canvas{display:block;}
         <div class="ins-val" id="ins-pf">—</div>
         <div class="ins-desc">복리 운용으로 발생한 순수 수익</div>
       </div>
+      <div class="ins-card" id="ins-mix-card" style="display:none;">
+        <div class="ins-lbl">전환 시 DB 이전금액</div>
+        <div class="ins-val" id="ins-mix-seed" style="color:#f5a623;">—</div>
+        <div class="ins-desc" id="ins-mix-desc">전환 시점의 DB 적립액이 DC로 이전</div>
+      </div>
     </div>
     <div class="prog-label">최종 퇴직금 상대 비교</div>
     <div class="prog-row">
@@ -301,7 +318,7 @@ function setupCanvas(canvas){
   return {ctx:ctx, w:w, h:h};
 }
 
-function drawLineChart(canvasId, labels, datasets, nowIdx){
+function drawLineChart(canvasId, labels, datasets, nowIdx, switchIdx){
   var canvas = document.getElementById(canvasId);
   if(!canvas) return;
   var s = setupCanvas(canvas);
@@ -353,6 +370,20 @@ function drawLineChart(canvasId, labels, datasets, nowIdx){
     ctx.setLineDash([]);
     ctx.fillStyle='#f5a623'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
     ctx.fillText('현재', nx, pad.top-4);
+    ctx.restore();
+  }
+
+  // "전환" vertical line
+  if(switchIdx >= 0 && switchIdx < labels.length){
+    var sx = xPos(switchIdx);
+    ctx.save();
+    ctx.strokeStyle='rgba(192,132,252,0.6)';
+    ctx.lineWidth=1.5;
+    ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(sx,pad.top); ctx.lineTo(sx,pad.top+ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#c084fc'; ctx.font='bold 10px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('전환', sx, pad.top+ch+28);
     ctx.restore();
   }
 
@@ -559,24 +590,57 @@ function compute(){
   document.getElementById('v-years').textContent=yrs+'년';
   document.getElementById('v-ret').textContent=(+document.getElementById('ret').value).toFixed(1)+'%';
 
-  var labels=[],dbArr=[],dcArr=[],annDB=[],annDC=[];
-  var dcAcc=0,principal=0,breakeven=null;
+  // 전환 시점 슬라이더 (0=없음, 1~yrs-1=전환연도)
+  var switchYr = parseInt(document.getElementById('switch-yr').value)||0;
+  // 슬라이더 max를 목표 근속에 맞춤
+  document.getElementById('switch-yr').max = yrs - 1;
+  if(switchYr >= yrs) { switchYr = 0; document.getElementById('switch-yr').value = 0; }
+  if(switchYr === 0){
+    document.getElementById('v-switch').textContent='없음';
+    document.getElementById('switch-desc').textContent='슬라이더를 움직이면 전환 시점 설정';
+  } else {
+    document.getElementById('v-switch').textContent=switchYr+'년차';
+    document.getElementById('switch-desc').textContent=switchYr+'년 근무 후 DC로 전환, 이후 S&P500 복리 운용';
+  }
+
+  var labels=[],dbArr=[],dcArr=[],mixArr=[],annDB=[],annDC=[];
+  var dcAcc=0,mixAcc=0,principal=0,breakeven=null,mixSeed=0;
 
   for(var y=1;y<=yrs;y++){
     var mo=sal*Math.pow(1+raise,y-1);
+    // 순수 DC (처음부터 DC)
     dcAcc=(dcAcc+mo)*(1+ret);
     principal+=mo;
+    // 순수 DB
     var db=sal*Math.pow(1+raise,y-1)*y;
+
+    // DB→DC 전환 시나리오
+    if(switchYr === 0){
+      mixAcc = 0; // 전환 없음
+    } else if(y <= switchYr){
+      // DB 유지 구간: DB 금액 누적
+      mixAcc = db;
+      mixSeed = db; // 전환 시점 DB 금액
+    } else {
+      // 전환 후: 전환 시점 DB금액 + 이후 매년 DC 적립, 복리 운용
+      if(y === switchYr + 1){
+        mixAcc = mixSeed; // 씨드머니 이전
+      }
+      mixAcc = (mixAcc + mo) * (1+ret);
+    }
+
     labels.push(y+'년');
     dbArr.push(Math.round(db));
     dcArr.push(Math.round(dcAcc));
+    mixArr.push(switchYr > 0 ? Math.round(mixAcc) : null);
     annDB.push(Math.round(mo));
     annDC.push(Math.round(mo*(1+ret)));
     if(breakeven===null&&dcAcc>=db) breakeven=y;
   }
 
-  var dbF=dbArr[yrs-1],dcF=dcArr[yrs-1],diff=dcF-dbF;
-  var profit=dcF-Math.round(principal),maxV=Math.max(dbF,dcF);
+  var dbF=dbArr[yrs-1],dcF=dcArr[yrs-1],mixF=switchYr>0?mixArr[yrs-1]:null;
+  var diff=dcF-dbF;
+  var profit=dcF-Math.round(principal),maxV=Math.max(dbF,dcF,mixF||0);
 
   // KPI
   document.getElementById('kpi-db').textContent=fmt(dbF);
@@ -585,6 +649,20 @@ function compute(){
   document.getElementById('kpi-diff').style.color=diff>=0?'var(--dc)':'#f87171';
   document.getElementById('kpi-diff-sub').textContent=diff>=0?'DC형이 유리':'DB형이 유리';
   document.getElementById('kpi-ratio').textContent=(dcF/dbF).toFixed(2)+'x';
+
+  if(mixF !== null){
+    document.getElementById('kpi-mix').textContent=fmt(mixF);
+    var mixDiff = mixF - dbF;
+    document.getElementById('kpi-mix-sub').textContent=(mixDiff>=0?'DB보다 +':'DB보다 ')+fmt(Math.abs(mixDiff));
+    document.getElementById('ins-mix-card').style.display='';
+    document.getElementById('ins-mix-seed').textContent=fmt(mixSeed);
+    document.getElementById('ins-mix-desc').textContent=switchYr+'년차 전환 시 DB→DC 이전금액';
+  } else {
+    document.getElementById('kpi-mix').textContent='—';
+    document.getElementById('kpi-mix-sub').textContent='전환 미설정';
+    document.getElementById('ins-mix-card').style.display='none';
+  }
+
   document.getElementById('ins-be').textContent=breakeven?breakeven+'년차':'역전 없음';
   document.getElementById('ins-pr').textContent=fmt(principal);
   document.getElementById('ins-pf').textContent=fmt(profit);
@@ -595,9 +673,14 @@ function compute(){
 
   // Charts
   var nowIdx = t.years > 0 && t.years <= yrs ? t.years - 1 : -1;
-  drawLineChart('lineChart', labels,
-    [{data:dbArr,color:'#4f9cf9',fill:'rgba(79,156,249,0.06)',dash:[5,3]},
-     {data:dcArr,color:'#36d6a0',fill:'rgba(54,214,160,0.06)'}], nowIdx);
+  var lineDatasets = [
+    {data:dbArr,color:'#4f9cf9',fill:'rgba(79,156,249,0.06)',dash:[5,3]},
+    {data:dcArr,color:'#36d6a0',fill:'rgba(54,214,160,0.06)'}
+  ];
+  if(mixF !== null){
+    lineDatasets.push({data:mixArr,color:'#f5a623',fill:'rgba(245,166,35,0.05)',dash:[3,2]});
+  }
+  drawLineChart('lineChart', labels, lineDatasets, nowIdx, switchYr > 0 ? switchYr - 1 : -1);
 
   var step=Math.max(1,Math.floor(yrs/8));
   var bL=[],bDB=[],bDC=[];
@@ -619,7 +702,7 @@ function setScenario(s,r,y,rt){
   compute();
 }
 
-['salary','raise','years','ret'].forEach(function(id){
+['salary','raise','years','ret','switch-yr'].forEach(function(id){
   document.getElementById(id).addEventListener('input',compute);
 });
 ['join-year','join-month'].forEach(function(id){
